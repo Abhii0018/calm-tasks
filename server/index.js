@@ -13,7 +13,13 @@ dotenv.config();
 const app = express();
 
 /* ================= MIDDLEWARE ================= */
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://calm-tasks-five.vercel.app", // your Vercel frontend
+    "http://localhost:5173"               // local dev
+  ],
+  credentials: true
+}));
 app.use(express.json()); // ✅ MUST be before routes
 
 /* ================= ROUTES ================= */
