@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	--brand-font-1: 'Montserrat', 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto;
+}
+
+body {
+	font-family: var(--brand-font-1);
+}
+
+.brand-title-shadow {
+	text-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+
