@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { getTasks, createTask, deleteTask, updateTask } from "../services/api";
+import TaskInput from "../components/TaskInput";
 
 const ACCENTS = {
 	indigo: "bg-indigo-500 text-indigo-500 ring-indigo-400",
@@ -13,13 +14,13 @@ const ACCENTS = {
 export default function Dashboard() {
 	const navigate = useNavigate();
 	const [tasks, setTasks] = useState([]);
-	const [text, setText] = useState("");
 	const [dark, setDark] = useState(true);
 	const [accent, setAccent] = useState("indigo");
 	const [editingId, setEditingId] = useState(null);
 	const [editText, setEditText] = useState("");
 	const [addLoading, setAddLoading] = useState(false);
 	const [addError, setAddError] = useState("");
+	const [toast, setToast] = useState({ show: false, msg: "" });
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -48,9 +49,8 @@ export default function Dashboard() {
 		})();
 	}, [navigate]);
 
-	async function handleAdd() {
-		if (!text.trim()) return;
-		// require token before attempting to add
+	async function handleAddFromInput({ title, dueDate, reminderDate }) {
+		if (!title || !title.trim()) return;
 		if (!localStorage.getItem("token")) {
 			setAddError("Please login to add tasks.");
 			navigate('/login');
@@ -59,9 +59,12 @@ export default function Dashboard() {
 		setAddError("");
 		setAddLoading(true);
 		try {
-			const res = await createTask({ title: text });
-			setTasks([res.data, ...tasks]);
-			setText("");
+			const payload = { title };
+			if (dueDate) payload.dueDate = dueDate;
+			if (reminderDate) payload.reminderDate = reminderDate;
+			const res = await createTask(payload);
+			setTasks((prev) => [res.data, ...prev]);
+			return res.data;
 		} catch (err) {
 			console.error("Add task failed:", err);
 			const msg = err.response?.data?.message || err.message || "Add failed";
@@ -69,14 +72,24 @@ export default function Dashboard() {
 			if (err.response?.status === 401 || /token|invalid/i.test(msg)) {
 				setTimeout(() => navigate('/login'), 700);
 			}
+			// rethrow so callers (TaskInput) can show error too
+			throw err;
 		} finally {
 			setAddLoading(false);
 		}
 	}
 
 	async function toggleTask(task) {
-		const res = await updateTask(task._id, { completed: !task.completed });
-		setTasks(tasks.map((t) => (t._id === task._id ? res.data : t)));
+		try {
+			const res = await updateTask(task._id, { completed: !task.completed });
+			setTasks(tasks.map((t) => (t._id === task._id ? res.data : t)));
+			if (res.data.completed) {
+				setToast({ show: true, msg: `🎉 You successfully completed '${res.data.title}' in CalmTasks` });
+				setTimeout(() => setToast({ show: false, msg: "" }), 3500);
+			}
+		} catch (err) {
+			console.error("Toggle failed:", err);
+		}
 	}
 
 	async function handleDelete(id) {
@@ -105,21 +118,18 @@ export default function Dashboard() {
 		>
 			{/* Header */}
 			<div className="flex justify-between items-center mb-6">
-				{/* Title on left */}
 				<motion.h1
-					    initial={{ y: -6, opacity: 0, scale: 0.99 }}
-					    animate={{ y: 0, opacity: 1, scale: 1 }}
-					    whileHover={{ scale: 1.02 }}
-					    transition={{ duration: 0.5, ease: "easeOut" }}
-					    className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-gray-900 dark:text-white brand-title-shadow"
-					    style={{ fontFamily: "Montserrat, Poppins, system-ui, -apple-system, 'Segoe UI', Roboto" }}
+					initial={{ y: -6, opacity: 0, scale: 0.99 }}
+					animate={{ y: 0, opacity: 1, scale: 1 }}
+					whileHover={{ scale: 1.02 }}
+					transition={{ duration: 0.5, ease: "easeOut" }}
+					className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-gray-900 dark:text-white brand-title-shadow"
+					style={{ fontFamily: "Montserrat, Poppins, system-ui, -apple-system, 'Segoe UI', Roboto" }}
 				>
-						    Your Tasks
+					Your Tasks
 				</motion.h1>
 
-				{/* Right controls: accent picker, dark icon, Home */}
 				<div className="flex items-center gap-3">
-					{/* Accent picker */}
 					{Object.keys(ACCENTS).map((c) => (
 						<button
 							key={c}
@@ -130,7 +140,6 @@ export default function Dashboard() {
 						/>
 					))}
 
-					{/* Dark toggle icon (cream-white) */}
 					<motion.button
 						onClick={() => setDark(!dark)}
 						whileTap={{ scale: 0.95 }}
@@ -138,74 +147,41 @@ export default function Dashboard() {
 						aria-label="Toggle dark mode"
 					>
 						{dark ? (
-							/* sun icon (cream) for dark -> light label */
 							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1f2937" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 								<circle cx="12" cy="12" r="3" fill="#f7f3ef" />
 								<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="#b0917a"/>
 							</svg>
 						) : (
-							/* moon icon for light -> dark */
 							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f7f3ef" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 								<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" fill="#111827"/>
 							</svg>
 						)}
 					</motion.button>
 
-					{/* Home on the right-most */}
 					<Link to="/" className="text-sm px-3 py-1 rounded-full border bg-white/5">Home</Link>
 				</div>
 			</div>
 
+			{/* Task input component (centered, calm, Todoist-like) */}
+			<div className="mb-8">
+				<TaskInput onAdd={handleAddFromInput} />
+			</div>
+
+			{/* Toast */}
+			{toast.show && (
+				<div className="fixed right-4 top-6 z-50">
+					<div className="px-4 py-2 rounded-md bg-emerald-500 text-white shadow">{toast.msg}</div>
+				</div>
+			)}
+
 			{/* Stats */}
 			<div className="flex gap-3 mb-8 text-sm">
-				<span className="px-3 py-1 rounded-full bg-black/10 dark:bg-white/10">
-					Total: {tasks.length}
-				</span>
+				<span className="px-3 py-1 rounded-full bg-black/10 dark:bg-white/10">Total: {tasks.length}</span>
 			</div>
 
 			<div className="flex gap-3 mt-6 mb-6">
-				<Link
-					to="/tasks/pending"
-					className="px-4 py-2 rounded-full bg-gray-800 text-white hover:opacity-90"
-				>
-					Pending Tasks
-				</Link>
-				<Link
-					to="/tasks/completed"
-					className="px-4 py-2 rounded-full bg-green-600 text-white hover:opacity-90"
-				>
-					Completed Tasks
-				</Link>
-			</div>
-
-			{/* Input */}
-			<div className="flex justify-center mb-8">
-				<input
-					value={text}
-					onChange={(e) => setText(e.target.value)}
-					onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-					placeholder="Write something calm..."
-					className="
-						w-full max-w-lg px-5 py-3 rounded-xl
-						bg-white/70 dark:bg-black/40
-						backdrop-blur
-						border border-black/10 dark:border-white/10
-						focus:ring-2 focus:outline-none
-					"
-				/>
-				<div className="ml-3">
-					<button
-						onClick={handleAdd}
-						disabled={addLoading}
-						aria-busy={addLoading}
-						className={`px-5 rounded-xl text-white ${ACCENTS[accent].split(" ")[0]} ${addLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-					>
-						{addLoading ? 'Adding...' : 'Add'}
-					</button>
-					{addError && (
-						<p className="text-xs text-rose-500 mt-2">{addError}</p>
-					)}
-				</div>
+				<Link to="/tasks/pending" className="px-4 py-2 rounded-full bg-gray-800 text-white hover:opacity-90">Pending Tasks</Link>
+				<Link to="/tasks/completed" className="px-4 py-2 rounded-full bg-green-600 text-white hover:opacity-90">Completed Tasks</Link>
 			</div>
 
 			{/* Today */}
@@ -219,51 +195,31 @@ export default function Dashboard() {
 						initial={{ opacity: 0, y: 10 }}
 						animate={{ opacity: 1, y: 0 }}
 						exit={{ opacity: 0, x: 80 }}
-						className="
-							flex items-center justify-between
-							mb-3 p-4 rounded-xl
-							bg-white/60 dark:bg-black/40
-							backdrop-blur
-						"
+						className="flex items-center justify-between mb-3 p-4 rounded-xl bg-white/60 dark:bg-black/40 backdrop-blur"
 					>
 						<div className="flex items-center gap-3 w-full">
-							<input
-								type="checkbox"
-								checked={task.completed}
-								onChange={() => toggleTask(task)}
-								className="scale-110"
-							/>
+							<input type="checkbox" checked={task.completed} onChange={() => toggleTask(task)} className="scale-110" />
 
 							{editingId === task._id ? (
-								<input
-									value={editText}
-									onChange={(e) => setEditText(e.target.value)}
-									onKeyDown={(e) => e.key === "Enter" && saveEdit(task)}
-									className="bg-transparent border-b flex-1 outline-none"
-									autoFocus
-								/>
+								<div className="flex items-center gap-2 w-full">
+									<input value={editText} onChange={(e) => setEditText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit(task)} className="flex-1 bg-transparent border-b outline-none px-2 py-1" autoFocus />
+									<button onClick={() => saveEdit(task)} className="px-3 py-1 rounded-md bg-emerald-500 text-white text-sm">Save</button>
+									<button onClick={() => setEditingId(null)} className="px-3 py-1 rounded-md bg-white/10 text-sm">Cancel</button>
+								</div>
 							) : (
 								<div className="flex-1">
-									<p className={task.completed ? "line-through opacity-60" : ""}>
-										{task.title}
-									</p>
-									<p className="text-xs opacity-50">
-										{new Date(task.createdAt).toLocaleString()}
-									</p>
+									<p className={task.completed ? "line-through opacity-60" : ""}>{task.title}</p>
+									<div className="flex items-center gap-3">
+										<p className="text-xs opacity-50">{new Date(task.createdAt).toLocaleString()}</p>
+										{task.dueDate && <span className="text-xs px-2 py-1 rounded-md bg-yellow-100 text-yellow-800">Due: {new Date(task.dueDate).toLocaleDateString()}</span>}
+									</div>
 								</div>
 							)}
 						</div>
 
-						<div className="flex gap-3">
-							<button
-								onClick={() => {
-									setEditingId(task._id);
-									setEditText(task.title);
-								}}
-							>
-								✏️
-							</button>
-							<button onClick={() => handleDelete(task._id)}>❌</button>
+						<div className="flex gap-3 items-center">
+							<button onClick={() => { setEditingId(task._id); setEditText(task.title); }} className="px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-sm" aria-label="Edit task">Edit</button>
+							<button onClick={() => handleDelete(task._id)} className="px-3 py-1 rounded-md bg-rose-500/90 hover:bg-rose-500 text-white text-sm" aria-label="Delete task">Delete</button>
 						</div>
 					</motion.div>
 				))}
@@ -271,5 +227,4 @@ export default function Dashboard() {
 		</motion.div>
 	);
 }
-
-
+ 
