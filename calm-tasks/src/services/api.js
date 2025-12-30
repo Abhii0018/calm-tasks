@@ -1,16 +1,9 @@
 import axios from "axios";
 
-/**
- * Base Axios instance
- */
 const API = axios.create({
   baseURL: `${import.meta.env.VITE_API_URL}/api`,
 });
 
-/**
- * 🔐 Axios Interceptor
- * Automatically attaches JWT token to every request
- */
 API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -24,11 +17,11 @@ API.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ---------- AUTH APIs ----------
+// AUTH
 export const signup = (data) => API.post("/auth/signup", data);
 export const login = (data) => API.post("/auth/login", data);
 
-// ---------- TASK APIs (Protected) ----------
+// TASKS
 export const getTasks = () => API.get("/tasks");
 export const createTask = (data) => API.post("/tasks", data);
 export const deleteTask = (id) => API.delete(`/tasks/${id}`);
